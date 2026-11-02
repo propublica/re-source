@@ -1,0 +1,22 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Run tests
+        env:
+          DATA_DIR: ${{ runner.temp }}/re-source-tests
+          LANGFUSE_TRACING_ENABLED: "false"
+        run: uv run pytest -q tests

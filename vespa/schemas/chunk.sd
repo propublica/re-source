@@ -1,0 +1,209 @@
+schema chunk {
+
+  document chunk {
+
+    field chunk_id type string {
+      indexing: summary | attribute
+      attribute: fast-search
+    }
+
+    field parent_ref type reference<parent> {
+      indexing: attribute
+    }
+
+    # The parent id as a plain value. parent_ref can't go in a summary, so
+    # without this the retrieval layer had to recover the parent by
+    # string-stripping chunk_id — see _parent_id_from_chunk.
+    field parent_id type string {
+      indexing: summary | attribute
+      attribute: fast-search
+    }
+
+    field column_name type string {
+      indexing: summary | attribute
+    }
+
+    field column_key type string {
+      indexing: attribute
+    }
+
+    field source_file type string {
+      indexing: summary | attribute
+    }
+
+    field text type string {
+      indexing: index | summary
+      index: enable-bm25
+    }
+  }
+
+  # Synthetic fields derived from `text` via the embedder components in
+  # services.xml. Must live outside the `document` block because their
+  # values are produced server-side at index time.
+
+  # e5-large-v2 requires a "passage: " prefix for documents (and
+  # "query: " at query time — see re_source/vespa_strategies.py).
+  field dense type tensor<float>(x[1024]) {
+    indexing: "passage: " . input text | embed e5 | attribute | index
+    attribute {
+      distance-metric: angular
+    }
+    index {
+      hnsw {
+        max-links-per-node: 16
+        neighbors-to-explore-at-insert: 200
+      }
+    }
+  }
+
+  # ColBERT token embeddings, packed to int8 per 128-d token.
+  # Decompressed at rank time with unpack_bits.
+  field colbert type tensor<int8>(t{}, x[16]) {
+    indexing: input text | embed colbert | attribute
+  }
+
+  # Resolve parent fields without an N+1 join. full_row (a map) needs
+  # struct-field attributes for cross-schema import; deferred to a later PR.
+  import field parent_ref.source_file as parent_source_file {}
+
+  fieldset default {
+    fields: text
+  }
+
+  # Shared by every profile that scores with ColBERT MaxSim, so the expression
+  # lives in exactly one place.
+  rank-profile colbert_base {
+    inputs {
+      query(q_colbert) tensor<float>(qt{}, x[128])
+    }
+
+    function colbert_maxsim() {
+      expression {
+        sum(
+          reduce(
+            sum(
+              query(q_colbert) * unpack_bits(attribute(colbert)),
+              x
+            ),
+            max, t
+          ),
+          qt
+        )
+      }
+    }
+  }
+
+  # Score an explicitly supplied set of chunk ids by ColBERT MaxSim alone.
+  # Used by the Content strategy to put union members that only a non-ColBERT
+  # lane surfaced (BM25, Atomic Decomp) onto the same scale as the rest.
+  #
+  # MaxSim must run in FIRST phase here: this query carries no userInput, so a
+  # hybrid-style first phase would score every hit identically and second-phase
+  # rerank-count would then pick an arbitrary subset to actually rank.
+  rank-profile colbert_by_id inherits colbert_base {
+    first-phase {
+      expression: colbert_maxsim
+    }
+    match-features {
+      firstPhase
+    }
+  }
+
+  rank-profile hybrid inherits colbert_base {
+    inputs {
+      query(q_dense) tensor<float>(x[1024])
+    }
+
+    # First-phase: linear combination of dense closeness (∈[0,1]) and
+    # BM25 on text (unbounded). Weights are placeholders — tune on the
+    # eval set before merging the schema change.
+    first-phase {
+      expression: closeness(field, dense) + bm25(text)
+    }
+
+    # Second-phase: ColBERT MaxSim. rerank-count must cover the `hits` a lane
+    # asks for (DEFAULT_TOP_K=500 in re_source/search_ui.py) or the remainder is never
+    # ColBERT-scored and Vespa sorts it below everything that was — where
+    # find_relevance_cutoff, which normalises against the top score, then very
+    # likely drops it. At 200 that made rerank depth an effective recall cap,
+    # not just a reordering knob. ColBERT is cheap here (a lane measured ~0.33s
+    # total), so this has headroom for the deep find-all sweeps too.
+    second-phase {
+      rerank-count: 1000
+      expression: colbert_maxsim
+    }
+
+    match-features {
+      closeness(field, dense)
+      bm25(text)
+      firstPhase
+      secondPhase
+    }
+  }
+
+  # Default profile. `hybrid` (below) keeps the original first phase for
+  # comparison; select it with VESPA_HYBRID_PROFILE=hybrid.
+  #
+  # `hybrid`'s first phase is closeness(field, dense) + bm25(text): a [0,1] term
+  # added to an unbounded one, so BM25 decides candidate selection almost alone.
+  # Measured, switching profiles moved det.atomic overlap@50 to a median of 0.351
+  # against a ZERO noise floor — first phase really was deciding nearly
+  # everything, which matters more since the lexical leg became exhaustive and it
+  # now selects from ~500k candidates rather than ~4.7k.
+  #
+  # bm25/(k + bm25) maps BM25 into [0,1) so both legs are comparable, with k the
+  # BM25 value that maps to 0.5. An earlier version hardcoded k=1, which is
+  # bounded but collapses the useful range:
+  #
+  #     bm25:      5      10      20      30
+  #     k=1:    0.83    0.91    0.95    0.97     <- 0.14 across the whole spread
+  #     k=10:   0.33    0.50    0.67    0.75
+  #     k=20:   0.20    0.33    0.50    0.60     <- default
+  #
+  # k is a query-time input, so it sweeps without a redeploy:
+  # VESPA_BM25_K=10. Two constants fitted by hand in this stack were already
+  # wrong, so this one stays adjustable.
+  #
+  # Adopted on the mechanism being defensible — bounded and comparable — not on
+  # measured output quality. Side-by-side top-10 reads were inconclusive, and
+  # that is not the level this pipeline is judged at: retrieval is recall-first
+  # and the pool goes to LLM validation.
+  rank-profile hybrid_sat inherits colbert_base {
+    inputs {
+      query(q_dense)  tensor<float>(x[1024])
+      query(bm25_k)   double: 20.0
+    }
+    first-phase {
+      expression: closeness(field, dense) + bm25(text) / (query(bm25_k) + bm25(text))
+    }
+    second-phase {
+      rerank-count: 1000
+      expression: colbert_maxsim
+    }
+    match-features {
+      closeness(field, dense)
+      bm25(text)
+      firstPhase
+      secondPhase
+    }
+  }
+
+  # Alternate profile: BM25 only on text (for ablations / cheap queries).
+  rank-profile bm25_only {
+    first-phase {
+      expression: bm25(text)
+    }
+    match-features: bm25(text)
+  }
+
+  # Alternate profile: dense only (closest to current "Atomic" without ColBERT).
+  rank-profile dense_only {
+    inputs {
+      query(q_dense) tensor<float>(x[1024])
+    }
+    first-phase {
+      expression: closeness(field, dense)
+    }
+    match-features: closeness(field, dense)
+  }
+}

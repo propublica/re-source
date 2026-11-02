@@ -1,0 +1,38 @@
+schema parent {
+
+  document parent {
+
+    field parent_id type string {
+      indexing: summary | attribute
+      attribute: fast-search
+    }
+
+    field source_file type string {
+      indexing: summary | attribute
+    }
+
+    field full_row type map<string, string> {
+      indexing: summary
+    }
+
+    # Every stored row value is available to the keyword lane. This is a plain
+    # lexical index: unlike chunk.text, it is not wired to either embedder.
+    field keyword_text type string {
+      indexing: index | summary
+      index: enable-bm25
+    }
+  }
+
+  fieldset default {
+    fields: keyword_text
+  }
+
+  rank-profile keyword {
+    first-phase {
+      expression: bm25(keyword_text)
+    }
+    match-features {
+      bm25(keyword_text)
+    }
+  }
+}

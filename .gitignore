@@ -1,0 +1,37 @@
+# Environment and credentials
+.env
+.venv/
+venv/
+.streamlit/secrets.toml
+
+# Runtime datasets, databases, models, and generated state
+data/
+models/
+baseline/
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.parquet
+*.duckdb
+*.jsonl
+*.bak
+
+# Licensed local font files
+assets/fonts/*.woff2
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+.DS_Store

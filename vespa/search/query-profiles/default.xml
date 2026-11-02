@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Raise the default per-query hit cap (Vespa default maxHits=400) so the
+     find-all "Author Profile + LLM" strategy can retrieve every matching
+     author_profile chunk in one query and LLM-verify all of them, rather than
+     being silently truncated to the top 400. maxOffset raised to match. -->
+<query-profile id="default">
+    <field name="maxHits">10000</field>
+    <field name="maxOffset">10000</field>
+</query-profile>

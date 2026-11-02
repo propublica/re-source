@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Required to deploy the token-aware chunking change: raising e5's max-tokens
+     and ColBERT's max-document-tokens alters the indexing statements for the
+     `dense` and `colbert` fields, which Vespa treats as a destructive change and
+     wants acknowledged.
+
+     The previous overrides covered the BGE-M3 -> e5 pivot and expired
+     2026-06-24, which would have refused this deploy.
+
+     Expires 2026-09-30. Vespa caps overrides at 30 days from deploy, and
+     `until` covers that whole day — so 2026-10-02 is read as
+     2026-10-03T00:00:00Z and rejected as 31 days out. Kept a couple of days
+     inside the limit. -->
+<validation-overrides>
+    <allow until="2026-09-30">indexing-change</allow>
+    <allow until="2026-09-30">field-type-change</allow>
+</validation-overrides>

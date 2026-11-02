@@ -1,0 +1,86 @@
+services:
+  models:
+    image: nginx:alpine
+    volumes:
+      - ./data/vespa_models:/usr/share/nginx/html:ro
+
+  vespa:
+    image: vespaengine/vespa:8
+    hostname: localhost
+    depends_on:
+      - models
+    environment:
+      VESPA_CONFIGSERVER_JVMARGS: "-Xms2g -Xmx2g"
+    ports:
+      - "127.0.0.1:${VESPA_HTTP_PORT:-8080}:8080"
+      - "127.0.0.1:${VESPA_CONFIG_PORT:-19071}:19071"
+    volumes:
+      - vespa-var:/opt/vespa/var
+      - vespa-logs:/opt/vespa/logs
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:19071/state/v1/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
+  app-ui:
+    build: .
+    image: re-source-app
+    command: >
+      streamlit run app.py
+      --server.address=0.0.0.0 --server.port=8501
+    depends_on:
+      vespa:
+        condition: service_healthy
+    environment: &app-environment
+      VESPA_ENDPOINT: "http://vespa:8080"
+      DATA_DIR: "/app/data"
+      DUCKDB_PATH: "/app/data/submissions_data.duckdb"
+      LLM_PROVIDER: ${LLM_PROVIDER:-local}
+      LLM_MODEL: ${LLM_MODEL:-qwen2.5:14b}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_HOSTED_MODEL: ${LLM_HOSTED_MODEL:-gpt-4.1}
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      ORG_NAME: ${ORG_NAME:-your organization}
+      ORG_DESCRIPTION: ${ORG_DESCRIPTION:-an organization reviewing submitted records}
+      REQUIRE_LOGIN: ${REQUIRE_LOGIN:-false}
+      REQUIRE_API_AUTH: ${REQUIRE_API_AUTH:-false}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      ADMIN_GROUPS: ${ADMIN_GROUPS:-}
+      API_REQUIRED_SCOPE: ${API_REQUIRED_SCOPE:-re-source:search}
+      LANGFUSE_TRACING_ENABLED: ${LANGFUSE_TRACING_ENABLED:-false}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-http://host.docker.internal:3000}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      AUDIT_SINK: ${AUDIT_SINK:-file}
+      AUDIT_SPOOL_PATH: "/app/data/audit_spool.jsonl"
+      AUDIT_S3_BUCKET: ${AUDIT_S3_BUCKET:-}
+      AUDIT_S3_PREFIX: ${AUDIT_S3_PREFIX:-audit}
+      AUDIT_S3_REGION: ${AUDIT_S3_REGION:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${APP_UI_PORT:-8501}:8501"
+    volumes:
+      - app-data:/app/data
+
+  app-api:
+    build: .
+    image: re-source-app
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+    depends_on:
+      vespa:
+        condition: service_healthy
+    environment: *app-environment
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${APP_API_PORT:-8000}:8000"
+    volumes:
+      - app-data:/app/data
+
+volumes:
+  app-data:
+  vespa-var:
+  vespa-logs:

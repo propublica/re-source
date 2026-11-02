@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<services version="1.0" xmlns:deploy="vespa" xmlns:preprocess="properties">
+
+  <container id="default" version="1.0">
+    <document-api/>
+    <search/>
+
+    <!-- Models are served by the `models` nginx sidecar in
+         docker-compose.vespa.yml. They live on the host at
+         ./data/vespa_models/ (fetched by scripts/fetch_vespa_models.sh)
+         and are bind-mounted into the nginx container. Vespa downloads
+         them once via HTTP, then caches in /opt/vespa/var.
+
+         We can't use file:// URLs (Vespa's UrlDownloader rejects the
+         scheme). -->
+
+    <!-- Vespa caches a model by URL and never re-checks it, so the e5 path
+         carries the model revision the fetch script pins: a new model needs a
+         new path, or Vespa keeps serving its cached copy. -->
+    <component id="e5" type="hugging-face-embedder">
+      <transformer-model url="http://models/e5-f169b11/model.onnx"/>
+      <tokenizer-model   url="http://models/e5-f169b11/tokenizer.json"/>
+      <!-- Optimum's feature-extraction export exposes token embeddings as
+           `last_hidden_state`. e5 uses attention-mask-aware mean pooling,
+           followed by L2 normalization, to produce its 1024-d vector.
+           e5 requires task prefixes: `embed(e5, "query: ...")` for
+           queries and `"passage: " . input text` baked into the
+           indexing statement in chunk.sd for documents. -->
+      <transformer-output>last_hidden_state</transformer-output>
+      <pooling-strategy>mean</pooling-strategy>
+      <normalize>true</normalize>
+      <!-- Set explicitly rather than inheriting a default. 512 is e5-large-v2's
+           architectural ceiling (BERT-large has 512 position embeddings), so it
+           is also what sets MAX_CHUNK_TOKENS in re_source/chunker.py. -->
+      <max-tokens>512</max-tokens>
+    </component>
+
+    <component id="colbert" type="colbert-embedder">
+      <transformer-model url="http://models/colbert/model.onnx"/>
+      <tokenizer-model   url="http://models/colbert/tokenizer.json"/>
+      <max-query-tokens>32</max-query-tokens>
+      <!-- Raised 256 -> 512 to match the chunk budget. At 256 ColBERT read only
+           the first quarter of a 4000-char chunk, which was a large part of why
+           24.6% of all indexed text sat in no vector. Unlike e5's, this limit is
+           config rather than architecture. -->
+      <max-document-tokens>512</max-document-tokens>
+    </component>
+
+    <nodes>
+      <!-- BGE-M3's ONNX model is 2.1 GB and loaded as native memory by
+           ONNX runtime (not JVM heap). Heap stays modest; direct memory
+           is bumped to give NIO buffers headroom for the tokenizer paths.
+           Native model memory comes out of the container's RSS budget. -->
+      <jvm options="-Xms2g -Xmx2g -XX:MaxDirectMemorySize=2g"/>
+      <node hostalias="node1"/>
+    </nodes>
+  </container>
+
+  <content id="tips" version="1.0">
+    <min-redundancy>1</min-redundancy>
+    <documents>
+      <document type="parent" mode="index" global="true"/>
+      <document type="chunk" mode="index"/>
+    </documents>
+    <nodes>
+      <node hostalias="node1" distribution-key="0"/>
+    </nodes>
+    <engine>
+      <proton>
+        <tuning>
+          <searchnode>
+            <requestthreads>
+              <persearch>2</persearch>
+            </requestthreads>
+          </searchnode>
+        </tuning>
+      </proton>
+    </engine>
+  </content>
+
+</services>
