@@ -12,7 +12,8 @@ from re_source import config
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+# 2: the search query is no longer recorded.
+SCHEMA_VERSION = 2
 
 EVENT_EXPORT = "export"
 EVENT_RESULTS_VIEWED = "results_viewed"
@@ -42,7 +43,6 @@ def build_event(
     record_ids: list[str],
     session_id: str | None = None,
     surface: str = SURFACE_STREAMLIT,
-    query: str | None = None,
     strategy: str | None = None,
     filename: str | None = None,
     page: int | None = None,
@@ -59,7 +59,6 @@ def build_event(
         "actor": actor,
         "session_id": session_id,
         "surface": surface,
-        "query": query,
         "strategy": strategy,
         "record_ids": ids,
         "record_count": len(ids),
@@ -146,7 +145,6 @@ def log_event(
     record_ids: list[str],
     session_id: str | None = None,
     surface: str = SURFACE_STREAMLIT,
-    query: str | None = None,
     strategy: str | None = None,
     filename: str | None = None,
     page: int | None = None,
@@ -159,7 +157,6 @@ def log_event(
             record_ids=record_ids,
             session_id=session_id,
             surface=surface,
-            query=query,
             strategy=strategy,
             filename=filename,
             page=page,

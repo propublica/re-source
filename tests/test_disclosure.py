@@ -56,7 +56,7 @@ def test_preparing_does_not_record(recorded):
 def test_record_logs_one_export_event(recorded):
     d = disclosure.prepare_export(
         [_result()], actor="dana@example.com", surface=audit.SURFACE_STREAMLIT,
-        query="mold in housing", strategy="Content", session_id="sess-1",
+        strategy="Content", session_id="sess-1",
     )
     d.record()
 
@@ -64,7 +64,7 @@ def test_record_logs_one_export_event(recorded):
     assert args[0] == audit.EVENT_EXPORT
     assert kwargs["actor"] == "dana@example.com"
     assert kwargs["surface"] == "streamlit"
-    assert kwargs["query"] == "mold in housing"
+    assert "query" not in kwargs
     assert kwargs["strategy"] == "Content"
     assert kwargs["session_id"] == "sess-1"
     assert kwargs["filename"] == d.filename
@@ -96,7 +96,7 @@ def test_write_puts_the_workbook_on_disk(tmp_path, recorded):
 
 def test_write_records_the_filename_it_wrote(tmp_path, recorded):
     out = tmp_path / "workplace_mentions.xlsx"
-    disclosure.prepare_export([_result()], actor="a@x.com", query="mold").write(out)
+    disclosure.prepare_export([_result()], actor="a@x.com").write(out)
 
     (_, kwargs), = recorded
     assert kwargs["filename"] == "workplace_mentions.xlsx"
@@ -114,14 +114,8 @@ def test_filename_is_a_timestamp_when_not_given():
     assert re.fullmatch(r"resource_\d{8}_\d{6}\.xlsx", d.filename)
 
 
-def test_filename_never_carries_the_query():
-    d = disclosure.prepare_export([_result()], actor="a", query="Jane Doe mold")
-    assert "Jane" not in d.filename and "mold" not in d.filename
-
-
 def test_an_explicit_filename_wins():
-    d = disclosure.prepare_export([_result()], actor="a", query="mold",
-                                  filename="given.xlsx")
+    d = disclosure.prepare_export([_result()], actor="a", filename="given.xlsx")
     assert d.filename == "given.xlsx"
 
 

@@ -60,13 +60,12 @@ def test_build_event_has_every_field():
         actor="dana@example.com",
         record_ids=["tips_2024::recA", "tips_2024::recB"],
         session_id="sess-1",
-        query="school vouchers",
         strategy="Content",
         filename="results.xlsx",
     )
     expected = {
         "schema_version", "event_id", "ts", "event", "actor", "session_id",
-        "surface", "query", "strategy", "record_ids", "record_count",
+        "surface", "strategy", "record_ids", "record_count",
         "filename", "page",
     }
     assert set(evt) == expected
@@ -172,7 +171,6 @@ def test_log_event_writes_to_file_sink(file_sink):
         actor="dana@example.com",
         record_ids=["tips_2024::recA"],
         session_id="sess-1",
-        query="vouchers",
         strategy="Content",
         filename="out.xlsx",
     )

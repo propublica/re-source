@@ -33,7 +33,6 @@ class Disclosure:
     record_ids: list[str]
     actor: str
     surface: str
-    query: str | None = None
     strategy: str | None = None
     session_id: str | None = None
 
@@ -45,7 +44,6 @@ class Disclosure:
             record_ids=self.record_ids,
             session_id=self.session_id,
             surface=self.surface,
-            query=self.query,
             strategy=self.strategy,
             filename=self.filename,
         )
@@ -63,7 +61,6 @@ def prepare_export(
     *,
     actor: str,
     surface: str = audit.SURFACE_CLI,
-    query: str | None = None,
     strategy: str | None = None,
     session_id: str | None = None,
     filename: str | None = None,
@@ -75,7 +72,6 @@ def prepare_export(
         record_ids=audit.record_refs(results),
         actor=actor,
         surface=surface,
-        query=query,
         strategy=strategy,
         session_id=session_id,
     )
@@ -87,7 +83,6 @@ def prepare_by_query_export(
     *,
     actor: str,
     surface: str = audit.SURFACE_CLI,
-    query: str | None = None,
     strategy: str | None = None,
     filename: str | None = None,
 ) -> Disclosure:
@@ -100,6 +95,5 @@ def prepare_by_query_export(
         record_ids=audit.record_refs(merged),
         actor=actor,
         surface=surface,
-        query=query,
         strategy=strategy,
     )
