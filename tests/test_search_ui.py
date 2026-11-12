@@ -656,7 +656,7 @@ def test_export_records_the_selected_rows_and_filename(monkeypatch):
     assert kwargs["query"] == "mold in housing"
     # The recorded filename is the one the user actually received.
     assert kwargs["filename"] == fake.kwargs["file_name"]
-    assert kwargs["filename"].startswith("vespa_search_mold_in_housing_")
+    assert kwargs["filename"].startswith("resource_")
 
 
 def test_export_button_label_is_just_the_action_and_count(monkeypatch):

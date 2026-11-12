@@ -1,5 +1,6 @@
 """One module pairs the workbook with the event that accounts for it."""
 
+import re
 from io import BytesIO
 from pathlib import Path
 
@@ -108,26 +109,14 @@ def test_write_records_exactly_once(tmp_path, recorded):
 
 # ----- naming --------------------------------------------------------------
 
-def test_filename_is_derived_from_the_query_when_not_given():
-    d = disclosure.prepare_export([_result()], actor="a", query="mold in housing")
-    assert d.filename.startswith("vespa_search_mold_in_housing_")
-    assert d.filename.endswith(".xlsx")
-
-
-def test_filename_falls_back_when_there_is_no_query():
+def test_filename_is_a_timestamp_when_not_given():
     d = disclosure.prepare_export([_result()], actor="a")
-    assert d.filename.startswith("vespa_search_results_")
+    assert re.fullmatch(r"resource_\d{8}_\d{6}\.xlsx", d.filename)
 
 
-def test_filename_keeps_unsafe_characters_out_of_the_download():
-    d = disclosure.prepare_export([_result()], actor="a", query="../../etc/passwd")
-    assert "/" not in d.filename and ".." not in d.filename
-
-
-def test_filename_is_bounded_by_query_length():
-    d = disclosure.prepare_export([_result()], actor="a", query="x" * 200)
-    # 40 chars of query, plus the fixed prefix, stamp and extension.
-    assert len(d.filename) < 80
+def test_filename_never_carries_the_query():
+    d = disclosure.prepare_export([_result()], actor="a", query="Jane Doe mold")
+    assert "Jane" not in d.filename and "mold" not in d.filename
 
 
 def test_an_explicit_filename_wins():
