@@ -49,7 +49,7 @@ def session_id() -> str:
     return _session().trace_session_id(lambda: uuid.uuid4().hex)
 
 
-def _audit_viewed(results, query: str, strategy: str, *, new_search: bool) -> None:
+def _audit_viewed(results, strategy: str, *, new_search: bool) -> None:
     """Record which records this user was shown."""
     session = _session()
     page = session.begin_audit_page(new_search=new_search)
@@ -62,7 +62,6 @@ def _audit_viewed(results, query: str, strategy: str, *, new_search: bool) -> No
         record_ids=refs,
         session_id=session_id(),
         surface=audit.SURFACE_STREAMLIT,
-        query=query,
         strategy=strategy,
         page=page,
     )
@@ -452,7 +451,7 @@ def _execute_search(strategy_name: str, query: str) -> None:
                   pool=page.pool, cursor=page.cursor)
     session.clear_filters()
 
-    _audit_viewed(page.results, query, strategy_name, new_search=True)
+    _audit_viewed(page.results, strategy_name, new_search=True)
 
 
 def _render_search_summary(strategy: str, query: str) -> None:
@@ -877,7 +876,7 @@ def _result_sort_label(elapsed, used_strategy) -> str:
     return f"Sorted by relevance · {elapsed_str}"
 
 
-def _render_export_button(export_rows, used_query, used_strategy) -> None:
+def _render_export_button(export_rows, used_strategy) -> None:
     """Excel download for the currently-selected rows, in the current container."""
     if not export_rows:
         st.download_button("Export 0 selected", data=b"", file_name="results.xlsx",
@@ -887,7 +886,6 @@ def _render_export_button(export_rows, used_query, used_strategy) -> None:
         export_rows,
         actor=current_user_id(),
         surface=audit.SURFACE_STREAMLIT,
-        query=used_query,
         strategy=used_strategy,
         session_id=session_id(),
     )
@@ -901,7 +899,7 @@ def _render_export_button(export_rows, used_query, used_strategy) -> None:
 
 
 def _render_results_header(filtered, results, elapsed, used_strategy, metadata,
-                           export_rows, used_query) -> None:
+                           export_rows) -> None:
     """The bar over the result list: what you got and how it's ordered on the
     left, what to do with what you've picked on the right.
     """
@@ -918,7 +916,7 @@ def _render_results_header(filtered, results, elapsed, used_strategy, metadata,
                     st.json(metadata)
         with actions:
             with st.container(key="export-action"):
-                _render_export_button(export_rows, used_query, used_strategy)
+                _render_export_button(export_rows, used_strategy)
 
 
 _LOAD_MORE_CSS = """
@@ -983,7 +981,7 @@ def _apply_load_more(session, run, active, plan) -> None:
     """Validate the planned slice, append it, and record only what's new."""
     more = run.next_page(active.query, plan.pool_slice)
     session.extend(more, plan.step)
-    _audit_viewed(more, active.query, active.strategy, new_search=False)
+    _audit_viewed(more, active.strategy, new_search=False)
 
 
 def _highlight_html(text: str, highlights) -> str:
@@ -1295,7 +1293,7 @@ def _render_results_page(*, result_css: str, render_result) -> None:
         selection = _selection()
         export_rows = selection.rows(filtered)
         _render_results_header(filtered, results, active.elapsed, active.strategy,
-                               active.metadata, export_rows, active.query)
+                               active.metadata, export_rows)
 
         with st.container(key="results-list"):
             _render_empty_state(results, filtered)

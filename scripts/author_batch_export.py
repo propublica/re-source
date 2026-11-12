@@ -168,14 +168,13 @@ def main() -> int:
     out_path = Path(args.out)
     # The workbook is the disclosure — writing it records one event covering
     # every record in it.
-    joined_query = " | ".join(q for _, q in queries)
     if tabs is not None:
         disclosure = prepare_by_query_export(
-            merged, tabs, actor=args.actor, query=joined_query, strategy=STRATEGY,
+            merged, tabs, actor=args.actor, strategy=STRATEGY,
         )
     else:
         disclosure = prepare_export(
-            merged, actor=args.actor, query=joined_query, strategy=STRATEGY,
+            merged, actor=args.actor, strategy=STRATEGY,
         )
     disclosure.write(out_path)
     print(f"Wrote {len(merged)} records to {out_path} ({time.time() - t_start:.1f}s)")

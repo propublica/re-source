@@ -48,7 +48,6 @@ async def search(
         actor=user.user_id,
         record_ids=audit.record_refs(result.results),
         surface=audit.SURFACE_API,
-        query=req.query,
         strategy=req.strategy,
     )
     return SearchResponse(

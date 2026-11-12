@@ -96,7 +96,7 @@ def test_search_records_an_audit_event(monkeypatch):
     assert args[0] == "results_viewed"
     assert kwargs["surface"] == "api"
     assert kwargs["record_ids"] == ["app1::rec1", "app1::rec2"]
-    assert kwargs["query"] == "teachers"
+    assert "query" not in kwargs
     assert kwargs["strategy"] == "Content"
 
 

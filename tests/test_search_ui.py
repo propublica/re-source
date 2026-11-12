@@ -562,7 +562,7 @@ def _audit_harness(monkeypatch):
 
 def test_audit_viewed_records_first_page(monkeypatch):
     calls = _audit_harness(monkeypatch)
-    ui._audit_viewed([_FakeResult("recA"), _FakeResult("recB")], "mold", "Content",
+    ui._audit_viewed([_FakeResult("recA"), _FakeResult("recB")], "Content",
                      new_search=True)
 
     (args, kwargs), = calls
@@ -570,13 +570,13 @@ def test_audit_viewed_records_first_page(monkeypatch):
     assert kwargs["record_ids"] == ["tips_2024::recA", "tips_2024::recB"]
     assert kwargs["page"] == 1
     assert kwargs["actor"] == "dana@example.com"
-    assert kwargs["query"] == "mold"
+    assert "query" not in kwargs
 
 
 def test_audit_viewed_load_more_records_only_the_new_slice(monkeypatch):
     calls = _audit_harness(monkeypatch)
-    ui._audit_viewed([_FakeResult("recA")], "mold", "Content", new_search=True)
-    ui._audit_viewed([_FakeResult("recB")], "mold", "Content", new_search=False)
+    ui._audit_viewed([_FakeResult("recA")], "Content", new_search=True)
+    ui._audit_viewed([_FakeResult("recB")], "Content", new_search=False)
 
     assert [kw["record_ids"] for _, kw in calls] == [
         ["tips_2024::recA"], ["tips_2024::recB"]
@@ -586,26 +586,25 @@ def test_audit_viewed_load_more_records_only_the_new_slice(monkeypatch):
 
 def test_audit_viewed_dedups_within_one_search(monkeypatch):
     calls = _audit_harness(monkeypatch)
-    ui._audit_viewed([_FakeResult("recA")], "mold", "Content", new_search=True)
-    ui._audit_viewed([_FakeResult("recA")], "mold", "Content", new_search=False)
+    ui._audit_viewed([_FakeResult("recA")], "Content", new_search=True)
+    ui._audit_viewed([_FakeResult("recA")], "Content", new_search=False)
 
     assert len(calls) == 1
 
 
-def test_audit_viewed_records_same_record_again_for_a_new_query(monkeypatch):
+def test_audit_viewed_records_same_record_again_for_a_new_search(monkeypatch):
     calls = _audit_harness(monkeypatch)
-    ui._audit_viewed([_FakeResult("recA")], "mold", "Content", new_search=True)
-    ui._audit_viewed([_FakeResult("recA")], "vouchers", "Content", new_search=True)
+    ui._audit_viewed([_FakeResult("recA")], "Content", new_search=True)
+    ui._audit_viewed([_FakeResult("recA")], "Content", new_search=True)
 
     assert len(calls) == 2
-    assert [kw["query"] for _, kw in calls] == ["mold", "vouchers"]
     assert [kw["page"] for _, kw in calls] == [1, 1]
 
 
 def test_audit_viewed_partial_overlap_logs_only_unseen(monkeypatch):
     calls = _audit_harness(monkeypatch)
-    ui._audit_viewed([_FakeResult("recA")], "mold", "Content", new_search=True)
-    ui._audit_viewed([_FakeResult("recA"), _FakeResult("recB")], "mold", "Content",
+    ui._audit_viewed([_FakeResult("recA")], "Content", new_search=True)
+    ui._audit_viewed([_FakeResult("recA"), _FakeResult("recB")], "Content",
                      new_search=False)
 
     assert calls[1][1]["record_ids"] == ["tips_2024::recB"]
@@ -639,31 +638,31 @@ def _export_harness(monkeypatch, clicked):
 
 def test_export_is_recorded_only_on_a_real_click(monkeypatch):
     _, calls = _export_harness(monkeypatch, clicked=False)
-    ui._render_export_button([_FakeResult("recA")], "mold", "Content")
+    ui._render_export_button([_FakeResult("recA")], "Content")
     assert calls == []
 
 
 def test_export_records_the_selected_rows_and_filename(monkeypatch):
     fake, calls = _export_harness(monkeypatch, clicked=True)
     ui._render_export_button(
-        [_FakeResult("recA"), _FakeResult("recB")], "mold in housing", "Content"
+        [_FakeResult("recA"), _FakeResult("recB")], "Content"
     )
 
     (args, kwargs), = calls
     assert args[0] == ui.audit.EVENT_EXPORT
     assert kwargs["record_ids"] == ["tips_2024::recA", "tips_2024::recB"]
     assert kwargs["strategy"] == "Content"
-    assert kwargs["query"] == "mold in housing"
+    assert "query" not in kwargs
     # The recorded filename is the one the user actually received.
     assert kwargs["filename"] == fake.kwargs["file_name"]
-    assert kwargs["filename"].startswith("vespa_search_mold_in_housing_")
+    assert kwargs["filename"].startswith("resource_")
 
 
 def test_export_button_label_is_just_the_action_and_count(monkeypatch):
     fake, _ = _export_harness(monkeypatch, clicked=False)
 
     ui._render_export_button(
-        [_FakeResult("recA"), _FakeResult("recB")], "mold", "Content"
+        [_FakeResult("recA"), _FakeResult("recB")], "Content"
     )
 
     assert fake.label == "Export 2 selected"
@@ -671,7 +670,7 @@ def test_export_button_label_is_just_the_action_and_count(monkeypatch):
 
 def test_export_with_no_selected_rows_records_nothing(monkeypatch):
     fake, calls = _export_harness(monkeypatch, clicked=True)
-    ui._render_export_button([], "mold", "Content")
+    ui._render_export_button([], "Content")
     assert calls == []
     assert fake.label == "Export 0 selected"
 
@@ -866,7 +865,7 @@ def test_execute_search_audits_the_first_page(monkeypatch):
     (args, kwargs), = calls
     assert args[0] == ui.audit.EVENT_RESULTS_VIEWED
     assert kwargs["page"] == 1
-    assert kwargs["query"] == "mold"
+    assert "query" not in kwargs
 
 
 def test_execute_search_clears_the_previous_filters(monkeypatch):
@@ -951,7 +950,7 @@ def test_load_more_does_not_re_audit_a_record_already_recorded(monkeypatch):
     session = ui._session()
     session.start(results=[], metadata={}, elapsed=1.0, query="mold",
                   strategy="Content", pool=["c0", "c1"], cursor=0)
-    ui._audit_viewed([_FakeResult("recA")], "mold", "Content", new_search=True)
+    ui._audit_viewed([_FakeResult("recA")], "Content", new_search=True)
 
     run = _run_for(_FakeStrategy(page=[_FakeResult("recA")]))
     ui._apply_load_more(session, run, session.active(),

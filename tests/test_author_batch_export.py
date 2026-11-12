@@ -168,14 +168,14 @@ def test_main_records_the_file_it_actually_wrote(monkeypatch, tmp_path, recorded
     assert openpyxl.load_workbook(out).sheetnames[0] == "Summary"
 
 
-def test_main_names_every_query_that_ran(monkeypatch, tmp_path, recorded):
+def test_main_leaves_the_queries_out_of_the_audit_log(monkeypatch, tmp_path, recorded):
     _run_main(
         monkeypatch, tmp_path, [_result("a", 0.5, "Job")],
         queries="teachers|tips from teachers\nnurses|nurses and hospital staff",
     )
 
     (_, kwargs), = recorded
-    assert kwargs["query"] == "tips from teachers | nurses and hospital staff"
+    assert "query" not in kwargs
 
 
 def test_nothing_to_export_records_nothing(monkeypatch, tmp_path, recorded):

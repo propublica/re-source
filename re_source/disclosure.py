@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import getpass
 import os
-import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -18,11 +17,11 @@ def default_actor() -> str:
     return os.environ.get("AUDIT_ACTOR") or getpass.getuser()
 
 
-def workbook_filename(query: str | None) -> str:
-    """`vespa_search_{query}_{timestamp}.xlsx` — the name a reporter receives."""
-    safe_q = re.sub(r"[^\w-]+", "_", query or "").strip("_")[:40] or "results"
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return f"vespa_search_{safe_q}_{stamp}.xlsx"
+def workbook_filename() -> str:
+    """`resource_{timestamp}.xlsx` — the name a reporter receives."""
+    # No query in the name: the filename is recorded in the audit log, and a
+    # search can name the very person a tip is about.
+    return f"resource_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
 
 @dataclass
@@ -34,7 +33,6 @@ class Disclosure:
     record_ids: list[str]
     actor: str
     surface: str
-    query: str | None = None
     strategy: str | None = None
     session_id: str | None = None
 
@@ -46,7 +44,6 @@ class Disclosure:
             record_ids=self.record_ids,
             session_id=self.session_id,
             surface=self.surface,
-            query=self.query,
             strategy=self.strategy,
             filename=self.filename,
         )
@@ -64,7 +61,6 @@ def prepare_export(
     *,
     actor: str,
     surface: str = audit.SURFACE_CLI,
-    query: str | None = None,
     strategy: str | None = None,
     session_id: str | None = None,
     filename: str | None = None,
@@ -72,11 +68,10 @@ def prepare_export(
     """Build the workbook for `results` and the event that would account for it."""
     return Disclosure(
         data=export_vespa_xlsx(results).getvalue(),
-        filename=filename or workbook_filename(query),
+        filename=filename or workbook_filename(),
         record_ids=audit.record_refs(results),
         actor=actor,
         surface=surface,
-        query=query,
         strategy=strategy,
         session_id=session_id,
     )
@@ -88,7 +83,6 @@ def prepare_by_query_export(
     *,
     actor: str,
     surface: str = audit.SURFACE_CLI,
-    query: str | None = None,
     strategy: str | None = None,
     filename: str | None = None,
 ) -> Disclosure:
@@ -97,10 +91,9 @@ def prepare_by_query_export(
     # any tab holds.
     return Disclosure(
         data=export_by_query_xlsx(merged, per_query).getvalue(),
-        filename=filename or workbook_filename(query),
+        filename=filename or workbook_filename(),
         record_ids=audit.record_refs(merged),
         actor=actor,
         surface=surface,
-        query=query,
         strategy=strategy,
     )
